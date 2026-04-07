@@ -35,11 +35,32 @@ func main() {
 	}
 	defer pool.Close()
 
+	// ========== СУЩЕСТВУЮЩИЕ КОМПОНЕНТЫ ДЛЯ ОБЫЧНЫХ ЗАДАЧ ==========
 	taskRepo := postgresrepo.New(pool)
 	taskUsecase := task.NewService(taskRepo)
 	taskHandler := httphandlers.NewTaskHandler(taskUsecase)
+
+	// ========== НОВЫЕ КОМПОНЕНТЫ ДЛЯ ПЕРИОДИЧЕСКИХ ЗАДАЧ ==========
+
+	// Репозитории
+	templateRepo := postgresrepo.NewTemplateRepository(pool)
+	instanceRepo := postgresrepo.NewInstanceRepository(pool)
+
+	// Сервис для периодических задач
+	recurringUsecase := task.NewRecurringService(templateRepo, instanceRepo)
+
+	// Хендлер для периодических задач
+	recurringHandler := httphandlers.NewRecurringHandler(recurringUsecase)
+
+	// Документация Swagger
 	docsHandler := swaggerdocs.NewHandler()
-	router := transporthttp.NewRouter(taskHandler, docsHandler)
+
+	// Роутер с обоими хендлерами
+	router := transporthttp.NewRouter(taskHandler, recurringHandler, docsHandler)
+
+	// ========== ЗАПУСК ФОНОВОЙ ГОРУТИНЫ ДЛЯ ГЕНЕРАЦИИ ЗАДАЧ ==========
+	// Запускаем генерацию экземпляров на 30 дней вперед
+	go startRecurrenceScheduler(ctx, recurringUsecase, logger)
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
@@ -63,6 +84,41 @@ func main() {
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		logger.Error("listen and serve", "error", err)
 		os.Exit(1)
+	}
+}
+
+// startRecurrenceScheduler - фоновая задача для генерации экземпляров
+func startRecurrenceScheduler(ctx context.Context, recurringUsecase task.RecurringUsecase, logger *slog.Logger) {
+	// Первый запуск сразу после старта
+	if err := recurringUsecase.GenerateFutureInstances(ctx, 30); err != nil {
+		logger.Error("initial generation failed", "error", err)
+	}
+
+	// Помечаем просроченные задачи при старте
+	if err := recurringUsecase.MarkOverdue(ctx); err != nil {
+		logger.Error("initial mark overdue failed", "error", err)
+	}
+
+	// Затем каждый день в полночь
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			logger.Info("running scheduled generation of task instances")
+			if err := recurringUsecase.GenerateFutureInstances(ctx, 30); err != nil {
+				logger.Error("scheduled generation failed", "error", err)
+			}
+
+			// Помечаем просроченные задачи
+			if err := recurringUsecase.MarkOverdue(ctx); err != nil {
+				logger.Error("mark overdue failed", "error", err)
+			}
+		case <-ctx.Done():
+			logger.Info("recurrence scheduler stopped")
+			return
+		}
 	}
 }
 

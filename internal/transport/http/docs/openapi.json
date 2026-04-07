@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Task Service API",
-    "version": "1.0.0",
-    "description": "CRUD API for tasks built with clean architecture."
+    "version": "2.0.0",
+    "description": "CRUD API for tasks with recurring tasks support. Built with clean architecture."
   },
   "servers": [
     {
@@ -13,7 +13,11 @@
   "tags": [
     {
       "name": "Tasks",
-      "description": "Operations with tasks"
+      "description": "Operations with regular tasks"
+    },
+    {
+      "name": "Recurring Tasks",
+      "description": "Operations with recurring tasks (templates and instances)"
     }
   ],
   "paths": {
@@ -131,6 +135,247 @@
           "404": { "$ref": "#/components/responses/NotFound" }
         }
       }
+    },
+    "/api/v1/tasks/recurring": {
+      "get": {
+        "tags": ["Recurring Tasks"],
+        "summary": "Get tasks for a specific date",
+        "description": "Returns all task instances (occurrences) for the given date",
+        "parameters": [
+          {
+            "name": "date",
+            "in": "query",
+            "required": false,
+            "description": "Date in YYYY-MM-DD format (default: today)",
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "example": "2026-04-07"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of task instances",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/TaskInstance" }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" }
+        }
+      }
+    },
+    "/api/v1/templates": {
+      "get": {
+        "tags": ["Recurring Tasks"],
+        "summary": "List all task templates",
+        "responses": {
+          "200": {
+            "description": "List of templates",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/TaskTemplate" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Recurring Tasks"],
+        "summary": "Create a recurring task template",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateTemplateRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created template",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TaskTemplate" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" }
+        }
+      }
+    },
+    "/api/v1/templates/{id}": {
+      "get": {
+        "tags": ["Recurring Tasks"],
+        "summary": "Get template by ID",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer", "format": "int64", "minimum": 1 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Task template",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TaskTemplate" }
+              }
+            }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "put": {
+        "tags": ["Recurring Tasks"],
+        "summary": "Update template",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer", "format": "int64", "minimum": 1 }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdateTemplateRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated template",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TaskTemplate" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "delete": {
+        "tags": ["Recurring Tasks"],
+        "summary": "Delete template (cascades to all instances)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer", "format": "int64", "minimum": 1 }
+          }
+        ],
+        "responses": {
+          "204": { "description": "Deleted" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/v1/templates/{id}/occurrences": {
+      "get": {
+        "tags": ["Recurring Tasks"],
+        "summary": "Get occurrence dates for a template",
+        "description": "Returns all dates when this recurring task should occur within the given date range",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer", "format": "int64", "minimum": 1 }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "description": "Start date in YYYY-MM-DD format",
+            "schema": { "type": "string", "format": "date" }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "description": "End date in YYYY-MM-DD format",
+            "schema": { "type": "string", "format": "date" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of occurrence dates",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "template_id": { "type": "integer", "format": "int64" },
+                    "occurrences": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/v1/instances/{id}/complete": {
+      "patch": {
+        "tags": ["Recurring Tasks"],
+        "summary": "Mark a task instance as completed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer", "format": "int64", "minimum": 1 }
+          }
+        ],
+        "responses": {
+          "204": { "description": "Successfully completed" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "description": "Task already completed" }
+        }
+      }
+    },
+    "/api/v1/instances/{id}/skip": {
+      "patch": {
+        "tags": ["Recurring Tasks"],
+        "summary": "Skip a task instance",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer", "format": "int64", "minimum": 1 }
+          }
+        ],
+        "responses": {
+          "204": { "description": "Successfully skipped" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
     }
   },
   "components": {
@@ -157,14 +402,8 @@
         "type": "object",
         "required": ["title"],
         "properties": {
-          "title": {
-            "type": "string",
-            "example": "Prepare release"
-          },
-          "description": {
-            "type": "string",
-            "example": "Collect release notes and check migrations"
-          },
+          "title": { "type": "string", "example": "Prepare release" },
+          "description": { "type": "string", "example": "Collect release notes and check migrations" },
           "status": {
             "type": "string",
             "enum": ["new", "in_progress", "done"],
@@ -176,14 +415,8 @@
         "type": "object",
         "required": ["title", "status"],
         "properties": {
-          "title": {
-            "type": "string",
-            "example": "Prepare release"
-          },
-          "description": {
-            "type": "string",
-            "example": "Collect release notes and check migrations"
-          },
+          "title": { "type": "string", "example": "Prepare release" },
+          "description": { "type": "string", "example": "Collect release notes and check migrations" },
           "status": {
             "type": "string",
             "enum": ["new", "in_progress", "done"],
@@ -196,25 +429,105 @@
         "properties": {
           "id": { "type": "integer", "format": "int64", "example": 1 },
           "title": { "type": "string", "example": "Prepare release" },
-          "description": {
+          "description": { "type": "string", "example": "Collect release notes and check migrations" },
+          "status": { "type": "string", "enum": ["new", "in_progress", "done"], "example": "new" },
+          "created_at": { "type": "string", "format": "date-time", "example": "2026-03-24T00:00:00Z" },
+          "updated_at": { "type": "string", "format": "date-time", "example": "2026-03-24T00:00:00Z" }
+        }
+      },
+      "RecurrenceRule": {
+        "type": "object",
+        "description": "Rule defining how often a task repeats",
+        "required": ["type", "start_date"],
+        "properties": {
+          "type": {
             "type": "string",
-            "example": "Collect release notes and check migrations"
+            "enum": ["daily", "monthly", "specific", "parity"],
+            "description": "daily: every N days | monthly: specific day of month | specific: exact dates | parity: even/odd days"
           },
+          "interval": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "For daily type: repeat every N days",
+            "example": 2
+          },
+          "day_of_month": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 31,
+            "description": "For monthly type: day of month (1-31)",
+            "example": 15
+          },
+          "specific_dates": {
+            "type": "array",
+            "items": { "type": "string", "format": "date" },
+            "description": "For specific type: array of exact dates",
+            "example": ["2026-04-01", "2026-04-15", "2026-04-30"]
+          },
+          "parity": {
+            "type": "string",
+            "enum": ["even", "odd"],
+            "description": "For parity type: 'even' or 'odd' days of month"
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Start date from which occurrences begin"
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Optional end date after which no occurrences are generated"
+          }
+        }
+      },
+      "TaskTemplate": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "format": "int64", "example": 1 },
+          "title": { "type": "string", "example": "Daily morning checkup" },
+          "description": { "type": "string", "example": "Check all patients in the department" },
+          "recurrence": { "$ref": "#/components/schemas/RecurrenceRule" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "TaskInstance": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "format": "int64", "example": 42 },
+          "template_id": { "type": "integer", "format": "int64", "example": 1 },
+          "due_date": { "type": "string", "format": "date", "example": "2026-04-07" },
           "status": {
             "type": "string",
-            "enum": ["new", "in_progress", "done"],
+            "enum": ["new", "in_progress", "done", "skipped"],
             "example": "new"
           },
-          "created_at": {
+          "completed_at": {
             "type": "string",
             "format": "date-time",
-            "example": "2026-03-24T00:00:00Z"
+            "nullable": true,
+            "example": "2026-04-07T10:30:00Z"
           },
-          "updated_at": {
-            "type": "string",
-            "format": "date-time",
-            "example": "2026-03-24T00:00:00Z"
-          }
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "CreateTemplateRequest": {
+        "type": "object",
+        "required": ["title", "recurrence"],
+        "properties": {
+          "title": { "type": "string", "example": "Daily morning checkup" },
+          "description": { "type": "string", "example": "Check all patients in the department" },
+          "recurrence": { "$ref": "#/components/schemas/RecurrenceRule" }
+        }
+      },
+      "UpdateTemplateRequest": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string", "example": "Updated morning checkup" },
+          "description": { "type": "string", "example": "Updated description" },
+          "recurrence": { "$ref": "#/components/schemas/RecurrenceRule" }
         }
       },
       "Error": {
